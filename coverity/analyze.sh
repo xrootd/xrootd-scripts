@@ -152,6 +152,7 @@ echoLog "[I] Done"
 # Mailing the results
 #-------------------------------------------------------------------------------
 mailLog
+GENTIME=`date +"%F %T"`
 echo -e "Hello,
 
    Your recent commits have been analysed by COVERITY and the
@@ -160,6 +161,8 @@ outstanding issues.
 
 Yours sincerely,
    The Coverity Bot
+
+Automatically generated on: $GENTIME
 
 $ISSUES" | mail -s "COVERITY: $STREAM - `date "+%F %T"` at `hostname`" \
 $REPORTMAIL
