@@ -9,7 +9,7 @@ import sys
 import os
 import getopt
 import mechanize
-import lxml.html.soupparser
+import lxml.etree
 import tempfile
 import urllib
 import zipfile
@@ -20,8 +20,9 @@ import hashlib
 # Some variables
 #-------------------------------------------------------------------------------
 BASE_URL="https://teamcity-dss.cern.ch:8443"
-CONFIG='/guestAuth/app/rest/buildTypes/id:bt46/builds/'
-ARTIFACTS_PREFIX='/guestAuth/repository/downloadAll/bt46/'
+CONFIG='/guestAuth/app/rest/buildTypes/id:'
+PROJECT='/guestAuth/app/rest/projects/id:project13'
+ARTIFACTS_PREFIX='/guestAuth/repository/downloadAll/'
 ARTIFACTS_SUFFIX=':id/artifacts.zip'
 
 sysMap = {}
@@ -37,28 +38,67 @@ class ConfigError(Exception):
     pass
 
 #-------------------------------------------------------------------------------
-def buildTagDict():
+def buildTagDict( configID ):
     """Build tag-url dictionary"""
+    #    print configURL
+    configURL = BASE_URL + CONFIG + configID + '/builds/'
     br = mechanize.Browser()
-    response = br.open( BASE_URL + CONFIG )
-    doc = lxml.html.soupparser.fromstring( response.read() )
+    response = br.open( configURL )
+    doc = lxml.etree.fromstring( response.read() )
     buildList = doc.xpath( '//build' )
     tagDict = {}
     for build in buildList:
         response = br.open( BASE_URL + build.attrib['href'] )
-        buildDoc = lxml.html.soupparser.fromstring( response.read() )
+        buildDoc = lxml.etree.fromstring( response.read() )
         tag = buildDoc.xpath( '//tag[1]/text()' )
         if tag:
             tag = tag[0]
-            tagDict[tag] = BASE_URL+ARTIFACTS_PREFIX+build.attrib['id']+ARTIFACTS_SUFFIX
+            tagDict[tag] = BASE_URL+ARTIFACTS_PREFIX+configID+'/'+build.attrib['id']+ARTIFACTS_SUFFIX
     return tagDict
+
+#-------------------------------------------------------------------------------
+def buildConfigDict():
+    """Build a list of configurations"""
+    br = mechanize.Browser()
+    response = br.open( BASE_URL + PROJECT )
+    doc = lxml.etree.fromstring( response.read() )
+    buildTypes = doc.xpath( '/project/buildTypes/buildType' )
+    configDict = {}
+    for buildType in buildTypes:
+        configDict[buildType.get("name")] = buildType.get("id")
+    return configDict
+
+#-------------------------------------------------------------------------------
+def getConfigId( opts ):
+    if opts.has_key( '--configid' ):
+        configID = opts['--configid']
+    elif opts.has_key( '--config' ):
+        configDict = buildConfigDict()
+        try:
+            configName = opts['--config']
+            configID = configDict[configName]
+        except KeyError, e:
+            raise OpError( 'Config name is invalid' )
+    else:
+        raise OpError( 'Either config or configid needs to be specified' )
+
+    return configID
 
 #-------------------------------------------------------------------------------
 def listTags( opts ):
     """List the available tags"""
-    tagDict = buildTagDict()
+
+    configID = getConfigId( opts )
+    tagDict = buildTagDict( configID )
     for tag, url in tagDict.items():
         print tag, url
+
+#-------------------------------------------------------------------------------
+def listConfigs( opts ):
+    """List available configurations"""
+    configDict = buildConfigDict()
+    for name, cid in configDict.items():
+        print cid, name
 
 #-------------------------------------------------------------------------------
 def writeMD5Sums( directory, destFile ):
@@ -82,9 +122,10 @@ def unpack( opts ):
     #---------------------------------------------------------------------------
     # Select the tag to download
     #---------------------------------------------------------------------------
-    tagDict = buildTagDict()    
+    configID = getConfigId( opts )
     try:
         tagName = opts['--tag']
+        tagDict = buildTagDict( configID )
         url = tagDict[tagName]
     except KeyError, e:
         raise OpError( 'Tag name not specified or invalid' )
@@ -127,7 +168,10 @@ def printHelp():
     """Print help"""
     print( 'GetReleaseFiles.py [options]' )
     print( ' --tag=tagName           tag name' )
+    print( ' --config=configName     configuration name' )
+    print( ' --configid=cid          configuration id' )
     print( ' --list-tags             list tags' )
+    print( ' --list-configs          list build configurations in the project' )
     print( ' --unpack                unpack the artifacts to the current dir' )
     print( ' --help                  this help message' )
 
@@ -139,7 +183,8 @@ def main():
     # Parse the commandline and print help if needed
     #---------------------------------------------------------------------------
     try:
-        params = ['tag=', 'list-tags', 'unpack', 'help']
+        params = ['tag=', 'list-tags', 'unpack', 'help', 'list-configs',
+                  'config=', 'configid=']
         optlist, args = getopt.getopt( sys.argv[1:], '', params )
     except getopt.GetoptError, e:
         print '[!]', e
@@ -153,7 +198,8 @@ def main():
     #---------------------------------------------------------------------------
     # Call the appropriate command
     #---------------------------------------------------------------------------
-    commandMap = {'--list-tags': listTags, '--unpack': unpack}
+    commandMap = {'--list-tags': listTags, '--unpack': unpack,
+                  '--list-configs': listConfigs }
     for command in commandMap:
         if command in opts:
             try:
