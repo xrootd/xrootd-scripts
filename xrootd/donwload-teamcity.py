@@ -158,7 +158,9 @@ def unpack( opts ):
             os.mkdir( newPath )
             dirList = os.listdir( oldPath )
             dirList.remove( 'logs' )
+            dirList.remove( 'manifest.txt' )
             dirList = filter( lambda x: not x.endswith( 'src.rpm' ), dirList )
+            dirList = filter( lambda x: not x.startswith( 'xrootd-tests' ), dirList )
             for name in dirList:
                 shutil.copy( '/'.join( [oldPath, name] ), newPath )
             writeMD5Sums( newPath, '/'.join( [newPath, 'md5sums'] ) )
