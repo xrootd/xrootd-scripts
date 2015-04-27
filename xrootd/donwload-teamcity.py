@@ -15,13 +15,14 @@ import urllib
 import zipfile
 import shutil
 import hashlib
+import subprocess
 
 #-------------------------------------------------------------------------------
 # Some variables
 #-------------------------------------------------------------------------------
 BASE_URL="https://teamcity-dss.cern.ch:8443"
 CONFIG='/guestAuth/app/rest/buildTypes/id:'
-PROJECT='/guestAuth/app/rest/projects/id:project13'
+PROJECT='/guestAuth/app/rest/projects/id:XRootD'
 ARTIFACTS_PREFIX='/guestAuth/repository/downloadAll/'
 ARTIFACTS_SUFFIX=':id/artifacts.zip'
 
@@ -116,6 +117,13 @@ def writeMD5Sums( directory, destFile ):
             f.write( sm[1] + ' ' + sm[0] + '\n' )
 
 #-------------------------------------------------------------------------------
+def sign( directory ):
+    """Sign all the RPM files in the directory"""
+    dirList = os.listdir( directory )
+    files = map( lambda x: '/'.join([directory, x]), dirList )
+    subprocess.call(["rpm", "--resign", "--define",  "_gpg_name xrootd-dev@slac.stanford.edu"]+files)
+
+#-------------------------------------------------------------------------------
 def unpack( opts ):
     """Unpack the artifacts"""
 
@@ -160,9 +168,11 @@ def unpack( opts ):
             dirList.remove( 'logs' )
             dirList.remove( 'manifest.txt' )
             dirList = filter( lambda x: not x.endswith( 'src.rpm' ), dirList )
-            dirList = filter( lambda x: not x.startswith( 'xrootd-tests' ), dirList )
+            dirList = filter( lambda x: not x.startswith( 'xrootd4-tests' ), dirList )
             for name in dirList:
                 shutil.copy( '/'.join( [oldPath, name] ), newPath )
+            if newPath.startswith('slc6'):
+                sign( newPath )
             writeMD5Sums( newPath, '/'.join( [newPath, 'md5sums'] ) )
 
 #-------------------------------------------------------------------------------
